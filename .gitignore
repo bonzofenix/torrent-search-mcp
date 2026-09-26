@@ -13,6 +13,9 @@ build
 .pytest_cache
 .coverage*
 
+# Go
+/torrent-search-mcp
+
 # Envs
 authorized_tokens.json
 .env

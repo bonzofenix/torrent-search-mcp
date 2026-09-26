@@ -37,6 +37,8 @@ uvx torrent-search-mcp --mode sse
 uvx torrent-search-mcp --mode api
 ```
 
+> [Prefer a single static binary for stdio MCP hosts? Use the Go build](#go-binary-stdio-mcp-server)
+
 ## Table of Contents
 
 - [Features](#features)
@@ -46,6 +48,7 @@ uvx torrent-search-mcp --mode api
   - [Configuration](#configuration-optional)
   - [Installation](#installation)
     - [Install from PyPI (Recommended)](#install-from-pypi-recommended)
+    - [Go Binary (stdio MCP server)](#go-binary-stdio-mcp-server)
     - [For Local Development](#for-local-development)
     - [For Docker](#for-docker)
 - [Usage](#usage)
@@ -145,6 +148,45 @@ pip install torrent-search-mcp
 ```bash
 python -m torrent_search
 ```
+
+#### Go Binary (stdio MCP server)
+
+The stdio MCP server is also available as a single static Go binary (no Python or `uv` needed). It is a drop-in replacement for `uvx torrent-search-mcp --mode stdio`: same tools, arguments and text output, same sources, and the same environment variables (`INCLUDE_LINKS`, `EXCLUDE_SOURCES`, `TORRENT_SEARCH_API_URL`, `TORRENT_SEARCH_API_KEY`, `WEBUI_URL`). It is meant for hosts that keep the server running as a long-lived subprocess: it logs only to stderr, writes each JSON-RPC response straight to stdout, and exits with code 0 when stdin closes or on `SIGTERM`/`SIGINT` (a `SIGHUP` is ignored).
+
+Only `--mode stdio` (the default) is supported; use the Python package for `cli`, `http`, `sse` and `api`. The Go binary does not read a `.env` file, so pass settings through the MCP client's `env` block.
+
+Prebuilt binaries for macOS and Linux (amd64/arm64) are attached to GitHub releases as `torrent-search-mcp-<os>-<arch>`:
+
+```bash
+# e.g. macOS on Apple Silicon (os: darwin|linux, arch: arm64|amd64)
+curl -fsSL -o ~/.local/bin/torrent-search-mcp \
+  https://github.com/bonzofenix/torrent-search-mcp/releases/latest/download/torrent-search-mcp-darwin-arm64
+chmod +x ~/.local/bin/torrent-search-mcp
+```
+
+Or install from source with Go 1.25+:
+
+```bash
+go install github.com/bonzofenix/torrent-search-mcp/cmd/torrent-search-mcp@latest
+```
+
+To build all four release binaries into `dist/`, run `scripts/build-go.sh [version]`.
+
+Then point your MCP client at the binary:
+
+```json
+{
+  "mcpServers": {
+    "torrent-search-mcp": {
+      "command": "torrent-search-mcp",
+      "args": ["--mode", "stdio"],
+      "env": { "INCLUDE_LINKS": "false" }
+    }
+  }
+}
+```
+
+`PRUNE_MAGNET_LINKS` keeps working unchanged: it is applied by the REST API when `forward_torrent` sends a torrent to Telegram.
 
 #### For Local Development
 
@@ -344,6 +386,11 @@ Configuration:
     "torrent-search-mcp": {
       "command": "uvx",
       "args": [ "torrent-search-mcp" ]
+    },
+    # with stdio via the static Go binary (no Python/uv needed)
+    "torrent-search-mcp": {
+      "command": "torrent-search-mcp",
+      "args": [ "--mode", "stdio" ]
     },
     # with streamable-http transport (Docker compose: MCP on port 8001; standalone server: 8000)
     "torrent-search-mcp": {
