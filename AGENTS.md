@@ -14,6 +14,7 @@ Torrent search MCP server - a Python-based torrent search service with MCP (Mode
 - Full local pipeline: `./dev.sh` (lock+sync, ruff, ty, prettier on md/html, tests with prettier before pytest - static HTML formatting matters because the served page is minified from it)
 - Never run destructive docker commands against volumes (`torrent-search-data` holds auth tokens)
 - Deploy: `docker compose up -d --build torrent-search-api torrent-search-mcp` (rebuild required for static changes; plain `restart` reuses the old image)
+- Go stdio MCP server (`cmd/torrent-search-mcp`, `internal/`): `gofmt -l .`, `go vet ./...`, `go test -race ./...`; release binaries via `scripts/build-go.sh [version]`. It ports `mcp_server.py` and the scrapers, so parser/tool changes on the Python side need the matching Go change (tool output is golden-tested against Python's `str(Torrent)`).
 
 ## Testing instructions
 
