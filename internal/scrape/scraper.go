@@ -119,11 +119,9 @@ func ScrapeTorrents(ctx context.Context, query string, sources []string) []strin
 		if !enabled(w.Name, sources) {
 			continue
 		}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		goSafe(&wg, "scrape "+w.Name, func() {
 			results[i], ok[i] = scrapeSource(ctx, w.Name, w.Parse, query)
-		}()
+		})
 	}
 	wg.Wait()
 	var texts []string
@@ -169,6 +167,9 @@ func popularCovers(used, requested int) bool {
 // keeping the best coverage.
 func refreshPopular(src PopularSource, perSource int) {
 	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("WARNING: popular refresh of %s panicked: %v", src.Name, r)
+		}
 		popularMu.Lock()
 		delete(popularRefreshing, src.Name)
 		popularMu.Unlock()
@@ -226,11 +227,9 @@ func PopularTorrents(ctx context.Context, sources []string, perSource int) []tor
 		if !enabled(src.Name, sources) {
 			continue
 		}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		goSafe(&wg, "popular "+src.Name, func() {
 			results[i], ok[i] = popularSource(ctx, src, perSource)
-		}()
+		})
 	}
 	wg.Wait()
 	var torrents []torrent.Torrent

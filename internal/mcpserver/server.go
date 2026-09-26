@@ -65,7 +65,12 @@ func NewTools() *Tools {
 		api:          search.New(),
 		IncludeLinks: strings.ToLower(os.Getenv("INCLUDE_LINKS")) == "true",
 		APIBaseURL:   strings.TrimRight(os.Getenv("TORRENT_SEARCH_API_URL"), "/"),
-		http:         &http.Client{Timeout: 20 * time.Second},
+		http: &http.Client{
+			Timeout: 20 * time.Second,
+			// httpx does not follow redirects here, and a followed 30x would
+			// turn a POST into a body-less GET that could read as success.
+			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+		},
 	}
 }
 

@@ -9,7 +9,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"math"
+	"net"
 	"net/http"
 	"net/mail"
 	"net/url"
@@ -52,7 +54,33 @@ const CSVHeader = "filename;category;size;seeders;leechers;downloads;date;magnet
 // HTTP
 // ---------------------------------------------------------------------------
 
-var client = &http.Client{Timeout: 20 * time.Second}
+// client bounds each phase at 20s like httpx.Timeout(20) rather than the
+// whole exchange: slow mirrors that keep streaming still finish, and every
+// fetch is capped overall by the per-source context (SourceTimeout).
+var client = &http.Client{Transport: &http.Transport{
+	Proxy:                 http.ProxyFromEnvironment,
+	DialContext:           (&net.Dialer{Timeout: 20 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
+	TLSHandshakeTimeout:   20 * time.Second,
+	ResponseHeaderTimeout: 20 * time.Second,
+	IdleConnTimeout:       90 * time.Second,
+	MaxIdleConnsPerHost:   8,
+	ForceAttemptHTTP2:     true,
+}}
+
+// goSafe runs fn on a WaitGroup goroutine, recovering panics: a panic in a
+// bare goroutine would take the whole long-lived MCP process down.
+func goSafe(wg *sync.WaitGroup, what string, fn func()) {
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("WARNING: %s panicked: %v", what, r)
+			}
+		}()
+		fn()
+	}()
+}
 
 // HTTPStatusError is returned for non-2xx answers (httpx raise_for_status).
 type HTTPStatusError struct {
@@ -196,7 +224,9 @@ func EnsureTrackers(ctx context.Context) {
 	trackersLoaded.Do(func() {
 		// Detached from the caller: this runs once and must not be cut short
 		// by whichever request happened to trigger it.
-		text, err := getText(context.WithoutCancel(ctx), trackersBestURL, nil)
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 20*time.Second)
+		defer cancel()
+		text, err := getText(ctx, trackersBestURL, nil)
 		if err != nil {
 			return
 		}

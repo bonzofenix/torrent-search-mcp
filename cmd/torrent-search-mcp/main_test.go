@@ -153,3 +153,46 @@ func TestRejectsOtherModes(t *testing.T) {
 		t.Fatalf("--version = %q %v", out, err)
 	}
 }
+
+func TestSurvivesInvalidFrames(t *testing.T) {
+	s := start(t)
+	for _, frame := range []string{"not json", `{"jsonrpc":"2.0","method":"notifications/initialized"} `, "{}", "[]", "42", `{"jsonrpc":"1.0","id":7,"method":"x"}`} {
+		if _, err := s.stdin.Write([]byte(frame + "\n")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Each rejected frame that is not a notification gets a JSON-RPC error.
+	for i := 0; i < 5; i++ {
+		line, err := s.stdout.ReadBytes('\n')
+		if err != nil {
+			t.Fatalf("server died on an invalid frame: %v (stderr: %s)", err, s.stderr)
+		}
+		var resp struct {
+			Error struct{ Code int } `json:"error"`
+		}
+		if json.Unmarshal(line, &resp) != nil || resp.Error.Code > -32600 {
+			t.Fatalf("unexpected reply %s", line)
+		}
+	}
+	// A legacy batch is split into single messages.
+	s.send([]map[string]any{{"jsonrpc": "2.0", "method": "notifications/initialized"}})
+	if !strings.HasPrefix(s.webapp(), "webapp URL not configured") {
+		t.Fatal("server should keep serving after invalid frames")
+	}
+	s.stdin.Close()
+	if code := s.wait(); code != 0 {
+		t.Fatalf("exit code = %d", code)
+	}
+}
+
+func TestAcceptsPythonCLIFlags(t *testing.T) {
+	s := start(t, "--mode", "stdio", "--host", "127.0.0.1", "--port", "9000", "--workers", "2", "--reload", "--dev")
+	s.webapp()
+	s.stdin.Close()
+	if code := s.wait(); code != 0 {
+		t.Fatalf("exit code = %d", code)
+	}
+	if err := exec.Command(binary, "-h").Run(); err != nil {
+		t.Fatalf("-h should exit 0: %v", err)
+	}
+}

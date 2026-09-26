@@ -15,6 +15,13 @@ import (
 // Python server decode here and vice versa.
 const base62Charset = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 
+// Bounds on ids read back from clients: queries are short, and an unbounded
+// zlib stream or base62 integer would let one torrent_id stall the server.
+const (
+	maxEncodedQuery = 2048
+	maxQuery        = 4096
+)
+
 // Compress zlib-compresses text and encodes it as base62 (Compress62.compress).
 func Compress(text string) string {
 	var buf bytes.Buffer
@@ -26,6 +33,9 @@ func Compress(text string) string {
 
 // Decompress reverses Compress (Compress62.decompress).
 func Decompress(compressed string) (string, error) {
+	if len(compressed) > maxEncodedQuery {
+		return "", errors.New("compressed query too long")
+	}
 	raw, err := decodeBytes(compressed)
 	if err != nil {
 		return "", err
@@ -35,9 +45,12 @@ func Decompress(compressed string) (string, error) {
 		return "", err
 	}
 	defer r.Close()
-	out, err := io.ReadAll(r)
+	out, err := io.ReadAll(io.LimitReader(r, maxQuery+1))
 	if err != nil {
 		return "", err
+	}
+	if len(out) > maxQuery {
+		return "", errors.New("decompressed query too long")
 	}
 	if !utf8.Valid(out) {
 		return "", errors.New("decompressed query is not valid UTF-8")

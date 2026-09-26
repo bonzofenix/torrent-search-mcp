@@ -67,13 +67,11 @@ func apibayParse(ctx context.Context, query string) (string, error) {
 		pages := make([][]any, len(urls))
 		var wg sync.WaitGroup
 		for i, u := range urls {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			goSafe(&wg, "apibay top100", func() {
 				if data, err := getJSON(ctx, u, nil); err == nil {
 					pages[i] = asList(data)
 				}
-			}()
+			})
 		}
 		wg.Wait()
 		for _, p := range pages {

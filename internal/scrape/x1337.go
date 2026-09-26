@@ -94,8 +94,8 @@ var x1337Detail = func(ctx context.Context, base, path string) (string, string, 
 	case <-ctx.Done():
 		return "", "", false
 	}
+	defer func() { <-x1337DetailSlots }()
 	detailHTML, err := getText(ctx, base+path, nil)
-	<-x1337DetailSlots
 	if err != nil {
 		return "", "", false
 	}
@@ -135,9 +135,7 @@ func x1337Parse(ctx context.Context, query string, maxItems int) (string, error)
 	listings := make([][]candidate, len(pages))
 	var wg sync.WaitGroup
 	for i, p := range pages {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		goSafe(&wg, "1337x listing", func() {
 			base, listHTML, err := x1337Fetch(ctx, p.path)
 			if err != nil {
 				return
@@ -147,7 +145,7 @@ func x1337Parse(ctx context.Context, query string, maxItems int) (string, error)
 					listings[i] = append(listings[i], candidate{base, p.category, r})
 				}
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	var candidates []candidate
@@ -169,12 +167,10 @@ func x1337Parse(ctx context.Context, query string, maxItems int) (string, error)
 	}
 	details := make([]detail, len(candidates))
 	for i, c := range candidates {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		goSafe(&wg, "1337x detail", func() {
 			magnet, date, ok := x1337Detail(ctx, c.base, c.row[1])
 			details[i] = detail{magnet, date, ok}
-		}()
+		})
 	}
 	wg.Wait()
 	var rows [][]string
